@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+cache/
+build/
+dist/
+*.spec.bak
+models/*
+!models/README.md
+data/processed/
+outputs/
+*.xlsx
+!vendor/sentiment-analysis/PyQt5-GUI/test.xlsx
