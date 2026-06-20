@@ -1,6 +1,6 @@
-# 中英双语多模态情绪识别系统
+﻿# 中英双语多模态情绪识别系统
 
-基于 PyQt5 的本地桌面应用。一期提供真实的中英双语文本情绪识别，语音和图像页面保留统一扩展接口。系统固定输出愤怒、厌恶、恐惧、喜悦、悲伤、惊讶、中性七类。
+基于 PyQt5 的本地桌面应用。提供真实的中英双语文本与 TESS 语音情感识别，图像页面保留统一扩展接口。系统固定输出愤怒、厌恶、恐惧、喜悦、悲伤、惊讶、中性七类。
 
 ## 已实现功能
 
@@ -97,3 +97,25 @@ $env:QT_QPA_PLATFORM='offscreen'
 
 第三方来源和修改范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
+
+## 语音情感识别
+
+语音模块支持 WAV 与 MP3。MP3 会先通过内置 miniaudio 解码为 16 kHz 单声道音频，无需安装 FFmpeg，也不需要重新训练模型。训练阶段使用 TESS 数据集，提取 MFCC、Delta-MFCC、能量、过零率、频谱质心、滚降频率和时长统计特征，再由标准化 RBF-SVM 完成七分类。训练集、验证集和测试集按说出的单词分组为 70%/15%/15%，同一个单词不会跨集合，避免词汇泄漏。
+
+```powershell
+.venv\Scripts\python scripts\train_speech_model.py `
+  --data-dir archive_sound `
+  --output-dir models\speech
+```
+
+训练产物包括 `speech_model.joblib`、`metrics.json`、`confusion_matrix.csv` 和可复用的 `features.npz`。当前数据中两条 `.wav` 实为 AIFF，脚本会明确跳过。评估指标保存在 `metrics.json` 中，不在桌面界面展示；界面仅显示单条音频的预测情绪、置信度与七类概率。报告同时包含双向留一说话人评估；当前跨说话人平均准确率为 47.75%、Macro-F1 为 40.16%，说明 TESS 上的同说话人高分不能直接代表真实开放环境泛化能力。
+
+
+### Windows EXE 交付
+
+`dist/EmotionRecognition.exe` 已内置语音模型、评估指标及 NumPy/SciPy/scikit-learn 推理依赖，可直接进行 WAV 语音情感识别，不需要旁置 `models/speech`。当前仓库没有 `models/text` 权重，因此交付 EXE 未嵌入体积约 4.4 GB 的 PyTorch 文本运行时；源码环境中的文本训练与推理流程不受影响。
+
+
+## 图像与摄像头情绪识别
+
+图像页支持导入 PNG、JPG、BMP、WebP 文件，也可启动电脑默认摄像头进行实时识别。系统使用 OpenCV Zoo 的 YuNet 检测人脸并以五点关键点对齐，再由 Progressive Teacher / MobileFaceNet 模型输出七类表情概率。模型随 EXE 内置，推理完全在本地进行。摄像头无法打开时，请检查 Windows 相机隐私权限以及摄像头是否被其他程序占用。

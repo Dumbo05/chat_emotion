@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 
@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QTextEdit,
     QVBoxLayout,
@@ -25,6 +26,7 @@ from PyQt5.QtWidgets import (
 from emotion_app.domain import EMOTIONS, EMOTION_LABELS_ZH, RecognitionResult
 from emotion_app.recognizers.base import FileRecognizerProtocol, TextRecognizerProtocol
 from emotion_app.workers import TaskWorker
+from emotion_app.ui.image_tab import ImageRecognitionTab
 
 
 APP_STYLE = """
@@ -61,6 +63,7 @@ class MainWindow(QMainWindow):
         self._active_thread: QThread | None = None
         self._active_worker: TaskWorker | None = None
         self._probability_bars: dict[str, QProgressBar] = {}
+        self._speech_probability_bars: dict[str, QProgressBar] = {}
         self._selected_audio = ""
         self._selected_image = ""
 
@@ -97,6 +100,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self._build_text_tab(), "文本识别")
         self.tabs.addTab(self._build_file_tab("speech"), "语音识别")
         self.tabs.addTab(self._build_file_tab("image"), "图像识别")
+        self.tabs.currentChanged.connect(self._tab_changed)
         root.addWidget(self.tabs, 1)
 
         footer = QLabel(
@@ -194,43 +198,54 @@ class MainWindow(QMainWindow):
 
     def _build_file_tab(self, modality: str) -> QWidget:
         is_image = modality == "image"
+        if is_image:
+            self.image_tab = ImageRecognitionTab(self.image_recognizer, self._run_task, self)
+            return self.image_tab
         recognizer = self.image_recognizer if is_image else self.speech_recognizer
         tab = QWidget()
         layout = QVBoxLayout(tab)
-        layout.setContentsMargins(28, 28, 28, 28)
-        layout.setSpacing(14)
-        heading = QLabel("图像情绪识别" if is_image else "语音情绪识别")
+        layout.setContentsMargins(28, 22, 28, 22)
+        layout.setSpacing(12)
+        heading = QLabel("图像情绪识别" if is_image else "语音情感识别")
         heading.setStyleSheet("font-size: 22px; font-weight: 700; color: #183a8a;")
         status = QLabel(recognizer.status)
         status.setWordWrap(True)
-        status.setStyleSheet("background: #fff6dc; padding: 12px; border-radius: 7px;")
+        status.setStyleSheet(
+            "background: #eaf6ee; padding: 12px; border-radius: 7px;"
+            if recognizer.available else
+            "background: #fff6dc; padding: 12px; border-radius: 7px;"
+        )
         path_edit = QLineEdit()
         path_edit.setReadOnly(True)
-        choose = QPushButton("选择图像" if is_image else "选择音频")
+        choose = QPushButton("选择图像" if is_image else "选择 WAV / MP3 音频")
         predict = QPushButton("开始识别")
         predict.setEnabled(recognizer.available)
         preview = QLabel("尚未选择文件")
         preview.setAlignment(Qt.AlignCenter)
-        preview.setMinimumHeight(300)
+        preview.setMinimumHeight(160 if is_image else 56)
         preview.setStyleSheet("border: 1px dashed #b7c3d8; border-radius: 8px; color: #7a8498;")
 
         def choose_file() -> None:
-            file_filter = "图像 (*.png *.jpg *.jpeg)" if is_image else "音频 (*.wav *.mp3 *.ogg)"
-            path, _ = QFileDialog.getOpenFileName(self, "选择文件", "", file_filter)
-            if not path:
+            file_filter = "图像 (*.png *.jpg *.jpeg)" if is_image else "全部音频 (*.wav *.mp3);;WAV 音频 (*.wav);;MP3 音频 (*.mp3)"
+            selected, _ = QFileDialog.getOpenFileName(self, "选择文件", "", file_filter)
+            if not selected:
                 return
-            path_edit.setText(path)
+            path_edit.setText(selected)
             if is_image:
-                self._selected_image = path
-                pixmap = QPixmap(path)
-                preview.setPixmap(pixmap.scaled(620, 320, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self._selected_image = selected
+                pixmap = QPixmap(selected)
+                preview.setPixmap(pixmap.scaled(620, 260, Qt.KeepAspectRatio, Qt.SmoothTransformation))
             else:
-                self._selected_audio = path
-                preview.setText(f"已选择音频：\n{Path(path).name}")
+                self._selected_audio = selected
+                preview.setText(f"已选择音频：{Path(selected).name}")
 
         choose.clicked.connect(choose_file)
         predict.clicked.connect(
-            lambda: self._predict_file(recognizer, self._selected_image if is_image else self._selected_audio)
+            lambda: self._predict_file(
+                recognizer,
+                self._selected_image if is_image else self._selected_audio,
+                None if is_image else predict,
+            )
         )
         buttons = QHBoxLayout()
         buttons.addWidget(choose)
@@ -239,8 +254,43 @@ class MainWindow(QMainWindow):
         layout.addWidget(status)
         layout.addWidget(path_edit)
         layout.addLayout(buttons)
-        layout.addWidget(preview, 1)
+        layout.addWidget(preview)
+
+        if not is_image:
+            result_box = QGroupBox("语音识别结果")
+            result_layout = QVBoxLayout(result_box)
+            self.speech_result_label = QLabel("等待识别")
+            self.speech_result_label.setAlignment(Qt.AlignCenter)
+            self.speech_result_label.setStyleSheet("font-size: 24px; font-weight: 700; color: #315fdb;")
+            self.speech_confidence_label = QLabel("置信度：--")
+            self.speech_confidence_label.setAlignment(Qt.AlignCenter)
+            result_layout.addWidget(self.speech_result_label)
+            result_layout.addWidget(self.speech_confidence_label)
+            for emotion in EMOTIONS:
+                row = QHBoxLayout()
+                name = QLabel(EMOTION_LABELS_ZH[emotion])
+                name.setFixedWidth(45)
+                bar = QProgressBar()
+                bar.setRange(0, 1000)
+                bar.setFormat("0.0%")
+                self._speech_probability_bars[emotion] = bar
+                row.addWidget(name)
+                row.addWidget(bar)
+                result_layout.addLayout(row)
+            layout.addWidget(result_box, 1)
+        else:
+            layout.addStretch(1)
+        if not is_image:
+            tab.setMinimumHeight(610)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setWidget(tab)
+            return scroll
         return tab
+
+    def _tab_changed(self, index: int) -> None:
+        if index != 2 and hasattr(self, "image_tab"):
+            self.image_tab.stop_camera()
 
     def _refresh_model_status(self) -> None:
         self.model_status.setText(f"模型状态：{self.text_recognizer.status}")
@@ -257,11 +307,29 @@ class MainWindow(QMainWindow):
             return
         self._run_task(lambda: self.text_recognizer.predict(text), self._show_result)
 
-    def _predict_file(self, recognizer: FileRecognizerProtocol, path: str) -> None:
-        result = recognizer.predict(path)
-        if not result.ok:
-            QMessageBox.warning(self, "模型不可用", result.error or recognizer.status)
+    def _predict_file(
+        self, recognizer: FileRecognizerProtocol, path: str, button: QPushButton | None = None
+    ) -> None:
+        if not path:
+            QMessageBox.warning(self, "文件错误", "请先选择需要识别的文件。")
+            return
+        if button is not None:
+            button.setEnabled(False)
 
+        def completed(result: RecognitionResult) -> None:
+            if button is not None:
+                button.setEnabled(True)
+            if not result.ok:
+                QMessageBox.warning(self, "识别失败", result.error or recognizer.status)
+                return
+            self.speech_result_label.setText(EMOTION_LABELS_ZH[result.emotion or "neutral"])
+            self.speech_confidence_label.setText(f"置信度：{result.confidence:.2%}")
+            for emotion, bar in self._speech_probability_bars.items():
+                value = float(result.probabilities.get(emotion, 0.0))
+                bar.setValue(round(value * 1000))
+                bar.setFormat(f"{value:.1%}")
+
+        self._run_task(lambda: recognizer.predict(path), completed)
     def _show_result(self, result: RecognitionResult) -> None:
         self._refresh_model_status()
         if not result.ok:
@@ -376,8 +444,18 @@ class MainWindow(QMainWindow):
         self.cancel_button.setEnabled(False)
 
     def closeEvent(self, event) -> None:
+        if hasattr(self, "image_tab"):
+            self.image_tab.stop_camera()
         if self._active_thread is not None and self._active_thread.isRunning():
             self._active_thread.requestInterruption()
             self._active_thread.quit()
             self._active_thread.wait(3000)
         super().closeEvent(event)
+
+
+
+
+
+
+
+

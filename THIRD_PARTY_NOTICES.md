@@ -30,3 +30,7 @@
 
 GoEmotions 数据集来自 Google Research，数据按 CC BY 4.0 提供。论文及数据来源必须在实验报告中引用。当前仓库中的 Ekman TSV 副本来自上述 `GoEmotions-pytorch` 上游。
 
+
+## OpenCV Zoo facial expression recognition
+
+Image and camera recognition use OpenCV Zoo's YuNet face detector and Progressive Teacher / MobileFaceNet facial-expression model. The expression-recognition files are Apache-2.0 licensed; YuNet model files are MIT licensed. Source: https://github.com/opencv/opencv_zoo

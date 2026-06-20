@@ -1,14 +1,18 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 hiddenimports = [
-    "transformers.models.bert.configuration_bert",
-    "transformers.models.bert.modeling_bert",
-    "transformers.models.bert.tokenization_bert",
-    "transformers.models.xlm_roberta.configuration_xlm_roberta",
-    "transformers.models.xlm_roberta.modeling_xlm_roberta",
-    "transformers.models.xlm_roberta.tokenization_xlm_roberta",
-    "tokenizers",
+    "sklearn.pipeline",
+    "sklearn.preprocessing._data",
+    "sklearn.svm._classes",
+    "sklearn.svm._base",
 ]
-datas = []
+
+datas = [
+    ("models/speech/speech_model.joblib", "models/speech"),
+    ("models/speech/metrics.json", "models/speech"),
+    ("models/speech/confusion_matrix.csv", "models/speech"),
+    ("models/image/face_detection_yunet_2023mar.onnx", "models/image"),
+    ("models/image/facial_expression_recognition_mobilefacenet_2022july.onnx", "models/image"),
+]
 
 a = Analysis(
     ["app.py"],
@@ -20,13 +24,9 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "tensorflow",
-        "flask",
-        "sqlalchemy",
-        "sklearn",
-        "scipy",
-        "pytest",
-        "matplotlib",
+        "tensorflow", "torch", "transformers", "tokenizers",
+        "flask", "sqlalchemy", "pytest", "matplotlib",
+        "sklearn.tests", "scipy.tests",
     ],
     noarchive=False,
 )
@@ -44,3 +44,6 @@ exe = EXE(
     upx=True,
     console=False,
 )
+
+
+
