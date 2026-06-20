@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import os
@@ -37,11 +37,8 @@ def main() -> int:
         except Exception:
             pass
     app = QApplication(sys.argv)
-    app.setApplicationName("中英双语情绪识别系统")
+    app.setApplicationName("多模态情绪智能识别系统")
     app.setOrganizationName("EmotionRecognitionTeam")
     window = MainWindow(text_recognizer, speech_recognizer, image_recognizer)
     window.show()
     return app.exec_()
-
-
-

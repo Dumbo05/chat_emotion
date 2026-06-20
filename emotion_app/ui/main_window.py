@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -76,7 +76,7 @@ class MainWindow(QMainWindow):
                 # dependency error; the desktop shell must still open.
                 pass
 
-        self.setWindowTitle("中英双语多模态情绪识别系统")
+        self.setWindowTitle("多模态情绪智能识别系统")
         self.resize(1040, 760)
         self.setMinimumSize(900, 680)
         self.setStyleSheet(APP_STYLE)
@@ -89,12 +89,10 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(24, 18, 24, 20)
         root.setSpacing(12)
 
-        title = QLabel("中英双语多模态情绪识别系统")
+        title = QLabel("多模态情绪智能识别系统")
+        title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("font-size: 25px; font-weight: 700; color: #183a8a;")
-        subtitle = QLabel("一期：文本真实识别 · 语音与图像接口预留")
-        subtitle.setStyleSheet("color: #67738a; font-size: 13px;")
         root.addWidget(title)
-        root.addWidget(subtitle)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_text_tab(), "文本识别")
@@ -451,11 +449,3 @@ class MainWindow(QMainWindow):
             self._active_thread.quit()
             self._active_thread.wait(3000)
         super().closeEvent(event)
-
-
-
-
-
-
-
-
