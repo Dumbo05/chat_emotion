@@ -1,0 +1,4 @@
+-r requirements-train.txt
+pytest>=8.0
+PyInstaller>=6.0
+
