@@ -1,0 +1,4 @@
+﻿component,model,parameters_or_support_vectors,layers_or_features,serialized_size_mib,local_accuracy_available
+image_detector,YuNet,53104,118,0.22181415557861328,no
+image_classifier,Progressive Teacher / MobileFaceNet,1193927,99,4.569904327392578,no
+speech_classifier,RBF-SVM,6844,129,7.394528388977051,yes

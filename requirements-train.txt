@@ -2,4 +2,5 @@
 scikit-learn>=1.4
 matplotlib>=3.8
 tqdm>=4.66
-
+onnx>=1.22
+onnxscript>=0.7

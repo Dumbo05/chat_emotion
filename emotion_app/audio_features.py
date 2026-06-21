@@ -96,3 +96,20 @@ def extract_audio_features(path: str | Path) -> np.ndarray:
     return np.concatenate([stats.astype(np.float32), [len(signal) / TARGET_SAMPLE_RATE]]).astype(np.float32)
 
 
+
+
+def select_speaker_reduced_features(features: np.ndarray) -> np.ndarray:
+    """Suppress coefficients dominated by speaker/channel identity.
+
+    The full vector contains mean, standard deviation, 10th/90th percentiles
+    for 44 frame descriptors plus duration. We drop coefficient 0 from every
+    block and replace absolute percentiles with their range.
+    """
+    values = np.asarray(features)
+    if values.shape[-1] != 177:
+        raise ValueError(f"语音特征维度应为 177，实际为 {values.shape[-1]}")
+    return np.concatenate([
+        values[..., 1:44],
+        values[..., 45:88],
+        values[..., 133:176] - values[..., 89:132],
+    ], axis=-1).astype(np.float32)

@@ -1,0 +1,41 @@
+{
+  "backend": "Python/matplotlib",
+  "speech_metrics_source": "models/speech/metrics.json",
+  "profile": {
+    "expression": {
+      "layers": 99,
+      "parameters": 1193927,
+      "size_mb": 4.569904327392578
+    },
+    "detector": {
+      "layers": 118,
+      "parameters": 53104,
+      "size_mb": 0.22181415557861328
+    },
+    "speech": {
+      "features": 129,
+      "support_vectors": 6844,
+      "n_support": [
+        1010,
+        1154,
+        1219,
+        1237,
+        1036,
+        1056,
+        132
+      ],
+      "C": 3.0,
+      "gamma": 0.007751937980396257,
+      "size_mb": 7.394528388977051
+    }
+  },
+  "labels": [
+    "anger",
+    "disgust",
+    "fear",
+    "joy",
+    "sadness",
+    "surprise",
+    "neutral"
+  ]
+}

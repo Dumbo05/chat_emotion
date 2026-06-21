@@ -37,7 +37,7 @@ outputs
 ```text
 emotion_app/
 scripts/
-data/processed/dataset_v1/
+datasets/project-data/processed/dataset_v1/
 requirements.txt
 requirements-train.txt
 ```
@@ -45,7 +45,7 @@ requirements-train.txt
 统一数据目录应包含：
 
 ```text
-data/processed/dataset_v1/
+datasets/project-data/processed/dataset_v1/
 ├── train.csv
 ├── validation.csv
 ├── test.csv
@@ -66,9 +66,9 @@ data/processed/dataset_v1/
 两人进入项目根目录后都必须执行：
 
 ```powershell
-Get-FileHash data\processed\dataset_v1\train.csv -Algorithm SHA256
-Get-FileHash data\processed\dataset_v1\validation.csv -Algorithm SHA256
-Get-FileHash data\processed\dataset_v1\test.csv -Algorithm SHA256
+Get-FileHash datasets\project-data\processed\dataset_v1\train.csv -Algorithm SHA256
+Get-FileHash datasets\project-data\processed\dataset_v1\validation.csv -Algorithm SHA256
+Get-FileHash datasets\project-data\processed\dataset_v1\test.csv -Algorithm SHA256
 ```
 
 结果必须分别为：
@@ -163,7 +163,7 @@ $env:HF_HUB_DISABLE_XET="1"
 New-Item -ItemType Directory -Force handoff | Out-Null
 nvidia-smi | Out-File handoff\gpu-info.txt -Encoding utf8
 .venv\Scripts\python -m pip freeze | Out-File handoff\pip-freeze.txt -Encoding utf8
-Copy-Item data\processed\dataset_v1\manifest.json handoff\dataset-manifest.json -Force
+Copy-Item datasets\project-data\processed\dataset_v1\manifest.json handoff\dataset-manifest.json -Force
 ```
 
 ## 9. 组员A：训练XLM-R
@@ -174,7 +174,7 @@ Copy-Item data\processed\dataset_v1\manifest.json handoff\dataset-manifest.json 
 New-Item -ItemType Directory -Force outputs\xlm-roberta | Out-Null
 
 .venv\Scripts\python scripts\train_text_model.py `
-  --data-dir data\processed\dataset_v1 `
+  --data-dir datasets\project-data\processed\dataset_v1 `
   --model-name xlm-roberta-base `
   --output-dir outputs\xlm-roberta `
   --epochs 4 `
@@ -204,7 +204,7 @@ New-Item -ItemType Directory -Force outputs\xlm-roberta | Out-Null
 New-Item -ItemType Directory -Force outputs\mbert | Out-Null
 
 .venv\Scripts\python scripts\train_text_model.py `
-  --data-dir data\processed\dataset_v1 `
+  --data-dir datasets\project-data\processed\dataset_v1 `
   --model-name bert-base-multilingual-cased `
   --output-dir outputs\mbert `
   --epochs 4 `

@@ -135,7 +135,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build fixed bilingual emotion dataset splits.")
     parser.add_argument("--goemotions-dir", type=Path, required=True)
     parser.add_argument("--chinese-csv", type=Path)
-    parser.add_argument("--output-dir", type=Path, default=Path("data/processed/dataset_v1"))
+    parser.add_argument("--output-dir", type=Path, default=Path("datasets/project-data/processed/dataset_v1"))
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 

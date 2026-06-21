@@ -1,6 +1,6 @@
 # 第三方开源声明
 
-本项目基于下列开源工作进行改造。`vendor/` 仅保留许可证和训练所需的英文数据；与项目运行无关的整套第三方源码未纳入仓库。
+本项目基于下列开源工作进行改造。上游源码保存在 `vendor/`，便于复现、审计和履行许可证义务。
 
 ## Sentiment-analysis
 
@@ -31,6 +31,6 @@
 GoEmotions 数据集来自 Google Research，数据按 CC BY 4.0 提供。论文及数据来源必须在实验报告中引用。当前仓库中的 Ekman TSV 副本来自上述 `GoEmotions-pytorch` 上游。
 
 
-## OpenCV Zoo facial expression recognition
+## Image recognition models
 
-Image and camera recognition use OpenCV Zoo's YuNet face detector and Progressive Teacher / MobileFaceNet facial-expression model. The expression-recognition files are Apache-2.0 licensed; YuNet model files are MIT licensed. Source: https://github.com/opencv/opencv_zoo
+Image and camera recognition use OpenCV Zoo's YuNet face detector (MIT license). The expression classifier is this project's SE-ResNet18, trained from random initialization on RAF-DB Basic; it does not use the OpenCV Zoo expression model. RAF-DB images are restricted to non-commercial research and educational use. Sources: https://github.com/opencv/opencv_zoo and http://whdeng.cn/RAF/model1.html

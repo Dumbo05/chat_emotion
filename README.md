@@ -1,307 +1,197 @@
-# 多模态情绪智能识别系统
+# Chat Emotion：多模态情感识别桌面系统
 
-> 基于 PyQt5 的本地多模态情绪识别研究原型，统一支持中文/英文文本、语音以及图像与摄像头输入，并将结果映射到七类情绪空间。
+一个面向科研演示与课程实验的本地多模态情感识别系统。项目以统一的七类情感空间为核心，分别处理文本、面部图像和语音输入，并通过 PyQt5 提供可视化桌面界面。代码、实验报告、科研绘图和绘图源数据均可审计；大型模型、原始数据集、缓存和构建产物不纳入 Git 仓库。
 
-## 摘要
+> 七分类标签：`anger`、`disgust`、`fear`、`joy`、`sadness`、`surprise`、`neutral`。
 
-本项目面向多模态情感计算（Multimodal Affective Computing）场景，实现了一套可在 Windows 本地运行的桌面应用。系统采用统一的七分类标签集合，对文本、语音和面部图像分别执行模态内推理，并以一致的结果结构输出预测类别、置信度和完整类别概率。文本模块支持基于 mBERT 或 XLM-R 的中英双语微调；语音模块采用人工声学特征与 RBF-SVM；图像模块采用 YuNet 人脸检测和 Progressive Teacher / MobileFaceNet 表情分类模型。界面层通过 `QThread` 执行耗时任务，避免推理阻塞主线程。
+## 项目特点
 
-本仓库强调可复现性与结果边界：不使用随机结果或关键词规则伪装模型输出；模型缺失、文件损坏或输入无效时返回明确错误。仓库不提交大体积模型权重、构建产物和 TESS 原始音频，使用者需按照本文说明配置或训练相应模型。
+- **文本情感识别**：基于 XLM-R 的中英文七分类模型。
+- **图像情感识别**：基于 RAF-DB 训练的 SE-ResNet18，使用 YuNet 人脸检测和 Flip TTA。
+- **语音情感识别**：以 WavLM 表征和 SIMSAN 分类头为主，保留传统 MFCC/RBF-SVM 回退方案。
+- **本地桌面界面**：推理在本机完成，支持文本输入、图片选择和音频选择。
+- **实验可复现**：训练、评估、ONNX 导出、模型检查和科研绘图脚本均位于 `scripts/`。
+- **工程边界清晰**：数据统一放在 `datasets/`，模型放在 `models/`，实验输出放在 `outputs/`。
 
-## 界面展示
+## 系统界面
 
-以下截图由当前代码在本地配置模型的环境中生成，未包含用户输入或个人数据。
-
-### 文本情绪识别
-
-![文本情绪识别界面](docs/images/text-interface.png)
-
-### 语音情绪识别
-
-![语音情绪识别界面](docs/images/speech-interface.png)
-
-### 图像与摄像头情绪识别
-
-![图像与摄像头情绪识别界面](docs/images/image-interface.png)
-
-## 研究任务定义
-
-系统将各模态输入统一映射为七类离散情绪：
-
-| 英文标签 | 中文标签 | 统一内部标识 |
+| 文本识别 | 图像识别 | 语音识别 |
 | --- | --- | --- |
-| Anger | 愤怒 | `anger` |
-| Disgust | 厌恶 | `disgust` |
-| Fear | 恐惧 | `fear` |
-| Joy | 喜悦 | `joy` |
-| Sadness | 悲伤 | `sadness` |
-| Surprise | 惊讶 | `surprise` |
-| Neutral | 中性 | `neutral` |
+| ![文本识别界面](docs/images/text-interface.png) | ![图像识别界面](docs/images/image-interface.png) | ![语音识别界面](docs/images/speech-interface.png) |
 
-每次成功推理返回：预测情绪、最高类别概率、七类概率分布以及模型名称。概率主要用于界面展示和同一模型内部的相对置信度解释，不应直接视为经过校准的现实概率。
+## 方法概述
 
-## 系统方法
-
-| 模态 | 输入 | 方法 | 输出 |
+| 模态 | 输入 | 核心方法 | 运行时模型 |
 | --- | --- | --- | --- |
-| 文本 | 中文/英文单句、Excel 文本列 | Hugging Face Transformer；支持 mBERT、XLM-R 等七分类模型 | 类别、置信度、七类概率 |
-| 语音 | WAV、MP3 | 16 kHz 单声道归一化；MFCC、Delta-MFCC、能量、过零率、频谱质心、滚降与时长统计；标准化 RBF-SVM | 类别、置信度、七类概率 |
-| 图像 | PNG、JPG、BMP、WebP、摄像头帧 | OpenCV Zoo YuNet 人脸检测；五点对齐；Progressive Teacher / MobileFaceNet 表情分类 | 单人或多人面部区域及七类概率 |
+| 文本 | 中文或英文文本 | XLM-R 序列分类 | Hugging Face 模型目录 |
+| 图像 | 单人脸图片 | YuNet + SE-ResNet18 + Flip TTA | ONNX |
+| 语音 | WAV/MP3 等音频 | WavLM 表征 + SIMSAN 分类头 | ONNX + Joblib |
 
-### 文本模块
+三个模块共享统一的领域对象和结果格式。耗时推理通过工作线程执行，避免阻塞 Qt 主界面；资源路径同时兼容源码运行和 PyInstaller 打包环境。
 
-文本模型通过 `AutoTokenizer` 与 `AutoModelForSequenceClassification` 加载。训练脚本支持固定随机种子、验证集最优 Macro-F1 模型选择、总体与中英文分组评估、分类报告和混淆矩阵。GoEmotions 多标签样本不会被任意压缩为单标签，而是明确排除，从而降低标签语义污染。
+## 实验结果
 
-### 语音模块
+下表给出项目最终报告中的主要结果。详细实验设置、数据划分和误差分析见 [实验报告](docs/实验报告.md)。
 
-音频统一解码为 16 kHz 单声道。WAV 使用标准 RIFF 读取，MP3 通过 `miniaudio` 解码，无需外部 FFmpeg。每条音频提取固定长度统计特征，随后输入带 `StandardScaler` 的 RBF-SVM。TESS 数据划分按“说出的单词”分组为 70%/15%/15%，同一词项不会跨训练、验证和测试集合，以减少词汇泄漏。
+| 模态 / 模型 | 评估集 | Accuracy | Macro-F1 | 说明 |
+| --- | --- | ---: | ---: | --- |
+| 文本 XLM-R | 七分类测试集 | 67.08% | 60.65% | 中英文统一标签空间 |
+| 图像 SE-ResNet18 | RAF-DB 官方测试集 | 77.71% | 69.22% | Flip TTA Accuracy 78.16% |
+| 语音 MFCC + RBF-SVM | 跨说话人测试，2,584 条 | 50.81% | 44.88% | 传统基线 |
+| 语音 SIMSAN | 锁定测试集，1,224 条 | 54.98% | 54.57% | 主要盲测结果 |
+| 语音 WavLM + SIMSAN | 同一固定测试集，1,224 条 | 66.58% | 66.81% | 测试集此前已被使用，属于非盲复评 |
 
-### 图像模块
+最后一行不能解释为全新的独立盲测结果。仓库保留这一说明，避免因重复查看测试集而高估泛化性能。
 
-图像识别首先使用 YuNet 检测人脸及五点关键点，再对齐至 112×112 像素，最后由 MobileFaceNet 表情模型输出七分类分数。系统对大图缩放检测，并在未检测到人脸时尝试旋转方向；摄像头识别完全在本地进行。
+## 科研绘图与源数据
 
-## 软件架构
+科研绘图的 PNG、PDF、SVG 和对应 CSV/JSON 已纳入 `docs/research-figures/`。本地 `outputs/image_speech_research_figures/` 中还保留投稿级 TIFF 原稿，但 TIFF 不提交到 Git，以控制仓库体积。
 
-```mermaid
-flowchart LR
-    A["输入层\n文本 / Excel / 音频 / 图像 / 摄像头"] --> B["PyQt5 界面层"]
-    B --> C["QThread 任务调度"]
-    C --> D["TextRecognizer"]
-    C --> E["SpeechRecognizer"]
-    C --> F["ImageRecognizer"]
-    D --> G["统一 RecognitionResult"]
-    E --> G
-    F --> G
-    G --> H["七类概率、置信度与错误信息"]
-```
+![语音模型性能](docs/research-figures/figure_1_speech_performance.png)
 
-核心分层如下：
+![语音混淆矩阵](docs/research-figures/figure_2_speech_confusion_matrices.png)
 
-- `emotion_app/domain.py`：统一标签、别名归一化与结果数据结构。
-- `emotion_app/recognizers/`：文本、语音与图像识别器及公共协议。
-- `emotion_app/audio_features.py`：音频读取、重采样与声学特征提取。
-- `emotion_app/ui/`：桌面界面、图像/摄像头标签页和结果可视化。
-- `emotion_app/workers.py`：后台任务与 Qt 信号封装。
-- `scripts/`：数据准备、文本训练、语音训练和命令行预测。
-- `tests/`：领域模型、数据处理、识别器和界面行为测试。
+![模型配置与复杂度](docs/research-figures/figure_3_model_profiles.png)
 
-## 数据集与预处理
-
-### 文本数据
-
-当前本地固定数据版本 `dataset_v1` 由 GoEmotions 的 Ekman 映射数据与 OCEMOTION 中文数据构成。处理后数据不提交到 Git，但 `manifest.json` 记录的统计如下：
-
-| 项目 | 数量 |
-| --- | ---: |
-| 总样本 | 85,153 |
-| 英文样本 | 49,469 |
-| 中文样本 | 35,684 |
-| 训练集 | 68,102 |
-| 验证集 | 8,514 |
-| 测试集 | 8,537 |
-
-数据划分使用固定随机种子 `42`。类别分布不均衡，其中 `joy` 与 `neutral` 样本较多，`fear` 样本明显较少，因此模型比较应优先报告 Macro-F1，而不能只报告 Accuracy。
-
-### 语音数据
-
-语音实验采用 Toronto Emotional Speech Set（TESS）。本地清洗后共使用 2,798 条样本，包含 OAF、YAF 两位说话人和七类情绪。原始语音数据约 537 MB，未纳入仓库；请从合法来源获取，并遵守数据集许可与引用要求。
-
-## 实验结果与解释
-
-### 语音模型
-
-| 评估设置 | Accuracy | Macro-F1 | 解释 |
-| --- | ---: | ---: | --- |
-| 按词项分组的本地测试集 | 100.00% | 100.00% | 训练与测试包含相同说话人，结果可能受说话人特征和受控录音条件影响 |
-| 双向留一说话人平均 | 47.75% | 40.16% | 更能反映跨说话人泛化，说明模型尚不适合无约束真实场景 |
-
-高同域分数不代表开放环境性能。TESS 录音条件受控且说话人数很少，模型可能学习到说话人、录音环境或语料风格。项目因此同时报告跨说话人结果，并将其作为主要泛化边界。
-
-### 文本与图像模型
-
-仓库没有提交最终文本模型的统一实验报告，也未在自建独立图像测试集上给出准确率。训练脚本会生成文本模型的 Accuracy、Macro-F1、分类报告和混淆矩阵；图像模块当前使用上游预训练模型。为保持学术严谨性，README 不声明未经独立复现实验验证的性能数字。
-
-## 环境要求
-
-- Windows 10/11 64 位
-- Python 3.10 或 3.11
-- 建议内存 16 GB；训练 Transformer 时建议使用 NVIDIA GPU
-- 摄像头识别需要 Windows 相机权限
-
-创建环境：
-
-```powershell
-python -m venv .venv
-.venv\Scripts\python -m pip install --upgrade pip
-.venv\Scripts\python -m pip install -r requirements.txt
-```
-
-训练和测试依赖：
-
-```powershell
-.venv\Scripts\python -m pip install -r requirements-dev.txt
-```
-
-## 模型配置
-
-Git 默认忽略 `models/` 下的模型文件，只保留说明文档。
-
-### 文本模型
-
-将完整 Hugging Face 七分类模型放入 `models/text/`，至少包含：
-
-- `config.json`
-- `model.safetensors` 或 `pytorch_model.bin`
-- tokenizer 配置与词表文件
-
-也可设置环境变量：
-
-```powershell
-$env:EMOTION_TEXT_MODEL='D:\models\emotion-text'
-```
-
-### 语音模型
-
-运行训练脚本后，将以下文件保留在 `models/speech/`：
-
-- `speech_model.joblib`
-- `metrics.json`
-- `confusion_matrix.csv`
-
-### 图像模型
-
-从 [OpenCV Zoo](https://github.com/opencv/opencv_zoo) 获取模型，并放入 `models/image/`：
-
-- `face_detection_yunet_2023mar.onnx`
-- `facial_expression_recognition_mobilefacenet_2022july.onnx`
-
-## 运行方法
-
-启动桌面应用：
-
-```powershell
-.venv\Scripts\python app.py
-```
-
-命令行文本预测：
-
-```powershell
-.venv\Scripts\python scripts\predict_text.py "今天终于完成实验了，我非常开心" --model models\text
-.venv\Scripts\python scripts\predict_text.py "I am very happy with this result" --model models\text
-```
-
-Excel 批量识别接受 `text`、`content`、`文本` 或 `内容` 列，并在输出中增加预测情绪、置信度和错误信息。
-
-## 训练复现
-
-### 准备文本数据
-
-```powershell
-.venv\Scripts\python scripts\prepare_dataset.py `
-  --goemotions-dir vendor\goemotions-pytorch\data\ekman `
-  --chinese-csv data\raw\chinese_emotions.csv `
-  --output-dir data\processed\dataset_v1
-```
-
-### 训练 mBERT
-
-```powershell
-.venv\Scripts\python scripts\train_text_model.py `
-  --data-dir data\processed\dataset_v1 `
-  --model-name bert-base-multilingual-cased `
-  --output-dir outputs\mbert `
-  --epochs 4 --batch-size 8 --gradient-accumulation 2 `
-  --learning-rate 2e-5 --max-length 128 --seed 42
-```
-
-### 训练 XLM-R
-
-```powershell
-.venv\Scripts\python scripts\train_text_model.py `
-  --data-dir data\processed\dataset_v1 `
-  --model-name xlm-roberta-base `
-  --output-dir outputs\xlm-roberta `
-  --epochs 4 --batch-size 4 --gradient-accumulation 4 `
-  --learning-rate 2e-5 --max-length 128 --seed 42
-```
-
-### 训练语音模型
-
-```powershell
-.venv\Scripts\python scripts\train_speech_model.py `
-  --data-dir archive_sound `
-  --output-dir models\speech `
-  --seed 42
-```
-
-详细的多人协作训练与交付步骤见 [TRAINING_GUIDE.md](TRAINING_GUIDE.md)。
-
-## 测试与打包
-
-运行测试：
-
-```powershell
-$env:QT_QPA_PLATFORM='offscreen'
-.venv\Scripts\python -m pytest
-```
-
-生成 Windows EXE：
-
-```powershell
-.venv\Scripts\pyinstaller emotion_app.spec
-```
-
-当前 PyInstaller 配置嵌入语音与图像模型及其推理依赖，但不嵌入约 4.4 GB 的 Transformer 文本运行时。文本训练与源码推理仍可正常使用；若需完整离线 EXE，应单独设计模型下载或分发方案。
-
-## 可复现性约定
-
-- 固定数据划分与随机种子 `42`。
-- 使用 `manifest.json` 和 SHA-256 校验数据版本。
-- 记录训练命令、依赖版本、GPU 信息和模型指标。
-- 文本评估同时报告总体、中文和英文指标。
-- 语音评估同时报告同域划分与跨说话人结果。
-- 禁止以关键词规则、随机概率或静默回退替代真实模型输出。
-
-## 局限性、伦理与隐私
-
-- 离散七分类不能覆盖真实情绪的连续性、混合性和语境依赖。
-- 文本模型可能受到语言、领域、类别不均衡和标注规范差异影响。
-- TESS 仅含两位说话人，年龄、口音和录音环境覆盖有限。
-- 面部表情不等同于内在情绪；图像结果不应作为医疗、招聘、教育评判或执法依据。
-- 系统默认本地推理，不主动上传文本、音频、图像或摄像头帧。
-- 使用数据集、预训练模型及人物影像时，应遵守许可、知情同意和隐私要求。
-
-## 项目结构
+## 工程结构
 
 ```text
-.
-├── app.py
-├── emotion_app/
+chat_emotion/
+├── app.py                         # 应用入口
+├── emotion_app/                   # 业务逻辑、识别器和界面
 │   ├── recognizers/
-│   ├── ui/
-│   ├── audio_features.py
-│   ├── domain.py
-│   └── workers.py
-├── scripts/
-├── tests/
-├── data/
-├── models/
-├── vendor/
-├── docs/images/
-├── emotion_app.spec
-└── requirements*.txt
+│   └── ui/
+├── scripts/                       # 数据准备、训练、评估、导出和绘图
+├── tests/                         # 自动化测试
+├── datasets/                      # 统一数据目录
+│   ├── project-data/
+│   ├── GoEmotions-pytorch/
+│   ├── OCEMOTION/
+│   ├── TESS/
+│   ├── CREMA-D/
+│   └── EmoDB/
+├── models/                        # 本地模型权重（Git 忽略）
+├── outputs/                       # 本地实验输出（Git 忽略）
+├── docs/                          # 实验报告、界面截图和科研绘图
+├── vendor/                        # 第三方许可与必要资源
+├── emotion_app.spec               # PyInstaller 配置
+└── requirements*.txt              # 运行、开发与训练依赖
 ```
 
-## 参考文献与上游项目
+数据集的放置方式和 Git 跟踪策略见 [datasets/README.md](datasets/README.md)，模型文件布局见 [models/README.md](models/README.md)。
 
-1. Demszky, D., et al. (2020). *GoEmotions: A Dataset of Fine-Grained Emotions*. Proceedings of ACL 2020. [论文](https://aclanthology.org/2020.acl-main.372/)
-2. Li, M., Long, Y., Lu, Q., & Li, W. (2016). *Emotion Corpus Construction Based on Selection from Hashtags*. Proceedings of LREC 2016. [论文](https://aclanthology.org/L16-1291/)
-3. Dupuis, K., & Pichora-Fuller, M. K. *Toronto Emotional Speech Set (TESS)*. Scholars Portal Dataverse. DOI: `10.5683/SP2/E8H2MF`.
-4. OpenCV. *OpenCV Zoo: YuNet Face Detection and Facial Expression Recognition Models*. [项目仓库](https://github.com/opencv/opencv_zoo)
-5. Monologg. *GoEmotions-pytorch*. [项目仓库](https://github.com/monologg/GoEmotions-pytorch)
+## 环境安装
 
-完整第三方来源、许可和修改范围见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+推荐 Windows 10/11、Python 3.10 或 3.11。项目本地已保留 `.venv`，清理工程不会删除该环境；克隆仓库的用户需要自行创建环境。
 
-## 许可证
+```powershell
+git clone https://github.com/Dumbo05/chat_emotion.git
+cd chat_emotion
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
-项目自有代码采用 [MIT License](LICENSE)。第三方代码、数据和模型分别遵循其原始许可证；使用和再分发前请检查对应许可条款。
+开发和测试依赖：
+
+```powershell
+pip install -r requirements-dev.txt
+pytest
+```
+
+训练相关依赖：
+
+```powershell
+pip install -r requirements-train.txt
+```
+
+## 模型准备与运行
+
+Git 仓库不包含大型模型权重。请按 [模型目录说明](models/README.md) 放置文本、图像和语音模型，或运行相应训练脚本生成。
+
+源码运行：
+
+```powershell
+.\.venv\Scripts\python.exe app.py
+```
+
+若已生成本地发行版，也可直接运行 `dist/EmotionRecognition.exe`。发行版、虚拟环境和模型均保留在本地，但不会上传到源码仓库。
+
+## 数据准备与训练
+
+所有训练数据统一位于 `datasets/`。常用命令如下。
+
+文本数据准备与训练：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_dataset.py
+.\.venv\Scripts\python.exe scripts\train_text_model.py `
+  --data-dir datasets\project-data\processed\text `
+  --model-name xlm-roberta-base `
+  --output-dir models\text
+```
+
+RAF-DB 图像模型训练：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\train_rafdb_model.py `
+  --data-root datasets\project-data\processed\raf-db-basic\aligned `
+  --labels datasets\project-data\raw\raf-db-basic\extracted\EmoLabel\list_patition_label.txt `
+  --output models\image\rafdb_se_resnet18 `
+  --architecture se_resnet18
+```
+
+语音传统基线与 SIMSAN：
+
+```powershell
+.\.venv\Scripts\python.exe scripts\train_speech_model.py `
+  --tess-dir datasets\TESS `
+  --crema-dir datasets\CREMA-D `
+  --emodb-dir datasets\EmoDB
+
+.\.venv\Scripts\python.exe scripts\train_simsan.py `
+  --tess-dir datasets\TESS `
+  --crema-dir datasets\CREMA-D `
+  --emodb-dir datasets\EmoDB
+```
+
+WavLM 特征提取、分类头训练、固定测试评估和 ONNX 导出分别由 `extract_wavlm_features.py`、`train_wavlm_simsan_head.py`、`evaluate_wavlm_simsan_fixed_test.py` 与 `export_wavlm_simsan_onnx.py` 完成。
+
+## 打包
+
+```powershell
+pip install pyinstaller
+pyinstaller --noconfirm emotion_app.spec
+```
+
+`emotion_app.spec` 是唯一保留的可移植打包配置。带绝对路径的临时 spec、历史构建目录和旧版可执行文件已从工程中清理。
+
+## 测试与质量控制
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest
+```
+
+建议在提交前同时执行：
+
+```powershell
+git diff --check
+git status --short
+```
+
+## 数据、隐私与限制
+
+- 图像和语音推理默认在本地执行，项目不会主动上传用户输入。
+- 模型预测仅用于科研、教学和软件演示，不应作为医疗、心理诊断、招聘或执法依据。
+- 表情、文本和语音中的情绪信号受文化、语言、场景、身份与采集设备影响。
+- RAF-DB、TESS、CREMA-D、EmoDB、OCEMOTION、GoEmotions 以及预训练模型均受各自许可约束；本项目许可证不替代其原始条款。
+- 开源仓库不分发第三方原始数据和大型权重，保证仓库精简，也避免越权再分发。
+
+## 许可证与第三方组件
+
+项目代码采用 [MIT License](LICENSE)。第三方依赖与许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及 `vendor/` 中保留的上游许可文件。
+
+## 引用
+
+若本项目用于课程报告或科研工作，请引用本仓库，并同时引用实际使用的数据集、预训练模型和方法论文。实验数字应连同数据划分与“盲测/非盲复评”状态一起报告。

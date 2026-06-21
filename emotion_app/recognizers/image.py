@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,8 +11,8 @@ from emotion_app.config import RESOURCE_ROOT
 from emotion_app.domain import EMOTIONS, RecognitionResult
 from emotion_app.recognizers.base import FileRecognizerProtocol
 
-MODEL_NAME = "OpenCV Zoo Progressive Teacher (MobileFaceNet)"
-MODEL_LABELS = ("anger", "disgust", "fear", "joy", "neutral", "sadness", "surprise")
+MODEL_NAME = "RAF-DB Basic 自训练 SE-ResNet18 + Flip TTA"
+MODEL_LABELS = ("surprise", "fear", "disgust", "joy", "sadness", "anger", "neutral")
 MAX_DETECTION_DIMENSION = 960
 
 
@@ -28,7 +28,7 @@ class ImageRecognizer(FileRecognizerProtocol):
     def __init__(self, model_path: str | Path | None = None):
         self.model_path = Path(model_path or RESOURCE_ROOT / "models" / "image")
         self.detector_path = self.model_path / "face_detection_yunet_2023mar.onnx"
-        self.expression_path = self.model_path / "facial_expression_recognition_mobilefacenet_2022july.onnx"
+        self.expression_path = self.model_path / "rafdb_se_resnet18" / "rafdb_emotion.onnx"
         self._detector = None
         self._expression_net = None
         self._lock = Lock()
@@ -41,7 +41,7 @@ class ImageRecognizer(FileRecognizerProtocol):
     def status(self) -> str:
         if not self.available:
             return f"未找到图像模型：{self.model_path}"
-        return "OpenCV Zoo 人脸表情模型已就绪（支持图片与摄像头）"
+        return "RAF-DB Basic 自训练 SE-ResNet18 已就绪（支持图片与摄像头）"
 
     def _load(self) -> None:
         if self._detector is None:
@@ -77,10 +77,17 @@ class ImageRecognizer(FileRecognizerProtocol):
         return cv2.warpAffine(frame, transform, (112, 112))
 
     def _classify(self, aligned_bgr: np.ndarray) -> RecognitionResult:
-        rgb = cv2.cvtColor(aligned_bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
-        blob = cv2.dnn.blobFromImage((rgb - 0.5) / 0.5)
-        self._expression_net.setInput(blob, "data")
-        raw = self._expression_net.forward(["label"])[0]
+        blob = cv2.dnn.blobFromImage(
+            aligned_bgr,
+            scalefactor=1.0 / 127.5,
+            size=(100, 100),
+            mean=(127.5, 127.5, 127.5),
+            swapRB=True,
+            crop=False,
+        )
+        batch = np.concatenate((blob, blob[:, :, :, ::-1]), axis=0)
+        self._expression_net.setInput(batch)
+        raw = self._expression_net.forward().mean(axis=0)
         values = self._softmax(raw)
         probabilities = {emotion: 0.0 for emotion in EMOTIONS}
         for label, probability in zip(MODEL_LABELS, values):
