@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import os
@@ -42,6 +42,11 @@ class SpeechRecognizer(FileRecognizerProtocol):
         if not self.available: return f"未找到语音模型：{self.model_path}（请先运行训练脚本）"
         if self._encoder_path.is_file() and self._head_path.is_file(): return "WavLM-SIMSAN 跨说话人模型已就绪（支持 WAV、MP3）"
         return "多数据集 MFCC-SVM 模型已就绪（支持 WAV、MP3）"
+
+    def prepare_runtime(self) -> None:
+        """Import ONNX Runtime before Qt loads its bundled Windows runtime."""
+        if self._encoder_path.is_file():
+            import onnxruntime  # noqa: F401
 
     def _load_best(self):
         if self._encoder is None:
@@ -92,7 +97,3 @@ class SpeechRecognizer(FileRecognizerProtocol):
             return self._predict_best(candidate) if self._encoder_path.is_file() and self._head_path.is_file() else self._predict_legacy(candidate)
         except Exception as exc:
             return RecognitionResult.failure(f"语音识别失败：{exc}", MODEL_NAME)
-
-
-
-
