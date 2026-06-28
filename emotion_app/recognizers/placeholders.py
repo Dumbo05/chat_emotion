@@ -34,4 +34,3 @@ class ImageRecognizer(_UnavailableFileRecognizer):
     """Extension point adapted from the upstream image inference module."""
 
     modality_zh = "图像"
-

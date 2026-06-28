@@ -1,4 +1,4 @@
-.venv/
+﻿.venv/
 .venv-package/
 __pycache__/
 *.py[cod]
@@ -13,25 +13,64 @@ test-cache-*/
 cache/
 .hf_cache/
 .playwright-cli/
+
+# Build and release artifacts
 build*/
 dist*/
 *.spec.bak
 *.previous.exe
+*.exe
+*.pkg
+*.log
 
-# Runtime and training artifacts (keep documentation only)
+# Runtime and training artifacts
 models/*
 !models/README.md
 outputs/
+server-results/
+reproduce_w2v/
 A1/
 member_b/
+mode_l/
+mode_l.zip
+mbert_b/
+xlm-roberta-experiments/
+image_output/
+handoff/
 
-# Local datasets. Small metadata and the project-ready GoEmotions split stay tracked.
+# Large datasets and archives
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+*.pth
+*.pt
+*.bin
+*.safetensors
+*.onnx
+*.onnx.data
+*.joblib
+*.npy
+*.npz
+*.mat
+*.xlsx
+
+# Keep small dataset metadata / curated text splits only
 datasets/project-data/processed/
 datasets/project-data/raw/raf-db-basic/
 datasets/OCEMOTION/
 datasets/TESS/
 datasets/CREMA-D/
 datasets/EmoDB/
+!datasets/README.md
+!datasets/project-data/README.md
+!datasets/project-data/raw/OCEMOTION_SOURCE.md
+!datasets/project-data/raw/chinese_emotions.csv
+!datasets/GoEmotions-pytorch/ekman/*.tsv
+!datasets/GoEmotions-pytorch/ekman/labels.txt
 
-*.xlsx
-!vendor/sentiment-analysis/PyQt5-GUI/test.xlsx
+# Local report repair scratch files
+docs/*backup*.md
+docs/*candidate*.md
+docs/*before_restore*.md

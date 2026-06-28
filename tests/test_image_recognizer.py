@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 import cv2
 import numpy as np
@@ -17,7 +17,7 @@ def image_recognizer() -> ImageRecognizer:
 
 def test_image_recognizer_models_are_available(image_recognizer):
     assert image_recognizer.available
-    assert "摄像头" in image_recognizer.status
+    assert "camera frames" in image_recognizer.status
 
 
 def test_blank_image_returns_real_no_face_error(tmp_path, image_recognizer):
@@ -25,12 +25,12 @@ def test_blank_image_returns_real_no_face_error(tmp_path, image_recognizer):
     cv2.imwrite(str(path), np.zeros((240, 320, 3), dtype=np.uint8))
     result = image_recognizer.predict(path)
     assert not result.ok
-    assert "未检测到" in (result.error or "")
+    assert "No face was detected" in (result.error or "")
     assert result.probabilities == {}
 
 
 def test_invalid_frame_is_rejected(image_recognizer):
-    with pytest.raises(ValueError, match="尺寸过小"):
+    with pytest.raises(ValueError, match="too small"):
         image_recognizer.predict_frame(np.zeros((10, 10, 3), dtype=np.uint8))
 
 

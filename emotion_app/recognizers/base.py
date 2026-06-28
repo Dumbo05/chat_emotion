@@ -28,4 +28,3 @@ class FileRecognizerProtocol(Recognizer):
     @abstractmethod
     def predict(self, path: str | Path) -> RecognitionResult:
         raise NotImplementedError
-

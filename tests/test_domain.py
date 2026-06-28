@@ -23,4 +23,3 @@ def test_result_success_and_failure_are_explicit():
     assert success.to_dict()["emotion_zh"] == "喜悦"
     assert not failure.ok
     assert failure.error == "missing model"
-

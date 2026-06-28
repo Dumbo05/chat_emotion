@@ -1,22 +1,33 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 hiddenimports = [
     "onnxruntime",
     "sklearn.pipeline",
     "sklearn.preprocessing._data",
     "sklearn.svm._classes",
     "sklearn.svm._base",
+    "tokenizers",
+    "emotion_app.recognizers.w2v_dann",
 ]
 
 datas = [
+    ("models/text/config.json", "models/text"),
+    ("models/text/model.onnx", "models/text"),
+    ("models/text/tokenizer.json", "models/text"),
+    ("models/text/tokenizer_config.json", "models/text"),
     ("models/speech/wavlm_simsan_encoder.onnx", "models/speech"),
     ("models/speech/wavlm_simsan_head.joblib", "models/speech"),
     ("models/speech/wavlm_simsan_fixed_test_metrics.json", "models/speech"),
+    ("models/speech/w2v_dann/w2v_dann_opt.onnx", "models/speech/w2v_dann"),
+    ("models/speech/w2v_dann/w2v_dann_opt.onnx.data", "models/speech/w2v_dann"),
+    ("models/speech/w2v_dann/server_eval_metrics.json", "models/speech/w2v_dann"),
     ("models/speech/speech_model.joblib", "models/speech"),
     ("models/speech/metrics.json", "models/speech"),
     ("models/speech/confusion_matrix.csv", "models/speech"),
     ("models/image/face_detection_yunet_2023mar.onnx", "models/image"),
-    ("models/image/rafdb_se_resnet18/rafdb_emotion.onnx", "models/image/rafdb_se_resnet18"),
-    ("models/image/rafdb_se_resnet18/metrics.json", "models/image/rafdb_se_resnet18"),
+    ("models/image/rafdb_v4_ensemble/efficientnetv2_m_224_seed42.onnx", "models/image/rafdb_v4_ensemble"),
+    ("models/image/rafdb_v4_ensemble/convnext_large_224_seed42.onnx", "models/image/rafdb_v4_ensemble"),
+    ("models/image/rafdb_v4_ensemble/maxvit_base_224_seed42.onnx", "models/image/rafdb_v4_ensemble"),
+    ("models/image/rafdb_v4_ensemble/metadata.json", "models/image/rafdb_v4_ensemble"),
 ]
 
 a = Analysis(
@@ -29,7 +40,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "tensorflow", "torch", "transformers", "tokenizers",
+        "tensorflow", "torch", "transformers", "safetensors",
         "flask", "sqlalchemy", "pytest", "matplotlib",
         "sklearn.tests", "scipy.tests",
     ],

@@ -17,10 +17,7 @@ else:
 @dataclass(frozen=True)
 class AppConfig:
     text_model_path: Path = Path(
-        os.environ.get("EMOTION_TEXT_MODEL", PROJECT_ROOT / "models" / "text")
+        os.environ.get("EMOTION_TEXT_MODEL", RESOURCE_ROOT / "models" / "text")
     )
     max_text_length: int = int(os.environ.get("EMOTION_MAX_TEXT_LENGTH", "128"))
     batch_size: int = int(os.environ.get("EMOTION_BATCH_SIZE", "16"))
-
-
-

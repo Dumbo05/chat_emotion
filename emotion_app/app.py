@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import os
@@ -13,6 +13,15 @@ def main() -> int:
     speech_recognizer = SpeechRecognizer()
     image_recognizer = ImageRecognizer()
 
+    smoke_text = os.environ.get("EMOTION_TEXT_SMOKE_TEXT")
+    if smoke_text:
+        result = text_recognizer.predict(smoke_text)
+        output = os.environ.get("EMOTION_TEXT_SMOKE_OUTPUT")
+        if output:
+            Path(output).write_text(
+                json.dumps(result.to_dict(), ensure_ascii=False), encoding="utf-8"
+            )
+        return 0 if result.ok else 2
     smoke_audio = os.environ.get("EMOTION_SPEECH_SMOKE_AUDIO")
     if smoke_audio:
         result = speech_recognizer.predict(smoke_audio)

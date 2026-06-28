@@ -22,4 +22,3 @@ class TaskWorker(QObject):
             self.failed.emit(str(exc))
         finally:
             self.finished.emit()
-

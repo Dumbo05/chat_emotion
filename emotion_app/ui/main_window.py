@@ -81,7 +81,6 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(900, 680)
         self.setStyleSheet(APP_STYLE)
         self._build_ui()
-        self._refresh_model_status()
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -101,11 +100,6 @@ class MainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self._tab_changed)
         root.addWidget(self.tabs, 1)
 
-        footer = QLabel(
-            "模型缺失或异常时系统只显示错误，不使用关键词、随机数或模拟置信度。"
-        )
-        footer.setStyleSheet("color: #7a8498; font-size: 12px;")
-        root.addWidget(footer)
         self.setCentralWidget(central)
 
     def _build_text_tab(self) -> QWidget:
@@ -166,8 +160,6 @@ class MainWindow(QMainWindow):
 
         result_group = QGroupBox("识别结果")
         result_layout = QVBoxLayout(result_group)
-        self.model_status = QLabel()
-        self.model_status.setWordWrap(True)
         self.result_label = QLabel("等待识别")
         self.result_label.setAlignment(Qt.AlignCenter)
         self.result_label.setStyleSheet(
@@ -175,7 +167,6 @@ class MainWindow(QMainWindow):
         )
         self.confidence_label = QLabel("置信度：--")
         self.confidence_label.setAlignment(Qt.AlignCenter)
-        result_layout.addWidget(self.model_status)
         result_layout.addWidget(self.result_label)
         result_layout.addWidget(self.confidence_label)
         for emotion in EMOTIONS:
@@ -206,13 +197,6 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
         heading = QLabel("图像情绪识别" if is_image else "语音情感识别")
         heading.setStyleSheet("font-size: 22px; font-weight: 700; color: #183a8a;")
-        status = QLabel(recognizer.status)
-        status.setWordWrap(True)
-        status.setStyleSheet(
-            "background: #eaf6ee; padding: 12px; border-radius: 7px;"
-            if recognizer.available else
-            "background: #fff6dc; padding: 12px; border-radius: 7px;"
-        )
         path_edit = QLineEdit()
         path_edit.setReadOnly(True)
         choose = QPushButton("选择图像" if is_image else "选择 WAV / MP3 音频")
@@ -249,7 +233,6 @@ class MainWindow(QMainWindow):
         buttons.addWidget(choose)
         buttons.addWidget(predict)
         layout.addWidget(heading)
-        layout.addWidget(status)
         layout.addWidget(path_edit)
         layout.addLayout(buttons)
         layout.addWidget(preview)
@@ -290,14 +273,6 @@ class MainWindow(QMainWindow):
         if index != 2 and hasattr(self, "image_tab"):
             self.image_tab.stop_camera()
 
-    def _refresh_model_status(self) -> None:
-        self.model_status.setText(f"模型状态：{self.text_recognizer.status}")
-        self.model_status.setStyleSheet(
-            "background: #eaf6ee; padding: 9px; border-radius: 6px;"
-            if self.text_recognizer.available
-            else "background: #fff0ef; padding: 9px; border-radius: 6px; color: #9a3028;"
-        )
-
     def _predict_text(self) -> None:
         text = self.text_input.toPlainText().strip()
         if not text:
@@ -329,7 +304,6 @@ class MainWindow(QMainWindow):
 
         self._run_task(lambda: recognizer.predict(path), completed)
     def _show_result(self, result: RecognitionResult) -> None:
-        self._refresh_model_status()
         if not result.ok:
             self.result_label.setText("识别失败")
             self.confidence_label.setText("置信度：--")

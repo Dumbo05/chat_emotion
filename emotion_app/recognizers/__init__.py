@@ -4,6 +4,3 @@ from .speech import SpeechRecognizer
 from .text import TextRecognizer
 
 __all__ = ["Recognizer", "TextRecognizer", "SpeechRecognizer", "ImageRecognizer"]
-
-
-

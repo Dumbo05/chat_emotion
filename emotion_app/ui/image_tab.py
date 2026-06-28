@@ -1,7 +1,9 @@
 ﻿from __future__ import annotations
 
+import time
+
 import cv2
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QThread, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import (
     QFileDialog, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
@@ -9,6 +11,7 @@ from PyQt5.QtWidgets import (
 )
 
 from emotion_app.domain import EMOTIONS, EMOTION_LABELS_ZH, RecognitionResult
+from emotion_app.workers import TaskWorker
 
 
 class ImageRecognitionTab(QWidget):
@@ -21,6 +24,12 @@ class ImageRecognitionTab(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._update_camera)
         self.probability_bars = {}
+        self._camera_faces = []
+        self._camera_inference_busy = False
+        self._last_camera_inference_at = 0.0
+        self._camera_inference_interval = 1.2
+        self._camera_thread = None
+        self._camera_worker = None
         self._build()
 
     def _build(self):
@@ -29,9 +38,6 @@ class ImageRecognitionTab(QWidget):
         layout.setSpacing(16)
         left_group = QGroupBox("图像 / 摄像头")
         left = QVBoxLayout(left_group)
-        status = QLabel(self.recognizer.status)
-        status.setWordWrap(True)
-        status.setStyleSheet("background: #eaf6ee; padding: 10px; border-radius: 7px;" if self.recognizer.available else "background: #fff6dc; padding: 10px; border-radius: 7px;")
         self.path_edit = QLineEdit()
         self.path_edit.setReadOnly(True)
         actions = QHBoxLayout()
@@ -49,7 +55,6 @@ class ImageRecognitionTab(QWidget):
         self.preview.setAlignment(Qt.AlignCenter)
         self.preview.setMinimumSize(500, 380)
         self.preview.setStyleSheet("background: #172033; border: 1px solid #b7c3d8; border-radius: 8px; color: white;")
-        left.addWidget(status)
         left.addWidget(self.path_edit)
         left.addLayout(actions)
         left.addWidget(self.preview, 1)
@@ -127,15 +132,20 @@ class ImageRecognitionTab(QWidget):
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         self.camera = camera
+        self._camera_faces = []
+        self._camera_inference_busy = False
+        self._last_camera_inference_at = 0.0
         self.camera_button.setText("停止摄像头")
         self.path_edit.setText("实时摄像头 0")
-        self.timer.start(100)
+        self.timer.start(33)
 
     def stop_camera(self):
         self.timer.stop()
         if self.camera is not None:
             self.camera.release()
             self.camera = None
+        self._camera_faces = []
+        self._camera_inference_busy = False
         self.camera_button.setText("启动摄像头")
 
     def _update_camera(self):
@@ -146,24 +156,62 @@ class ImageRecognitionTab(QWidget):
             self.stop_camera()
             QMessageBox.warning(self, "摄像头错误", "摄像头画面读取失败。")
             return
-        try:
-            faces = self.recognizer.predict_frame(frame)
-            for face in faces:
-                x, y, width, height = face.box
-                cv2.rectangle(frame, (x, y), (x + width, y + height), (49, 95, 219), 2)
-                text = f"{face.result.emotion} {face.result.confidence:.0%}"
-                cv2.putText(frame, text, (x, max(20, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (49, 95, 219), 2, cv2.LINE_AA)
-            if faces:
-                self.show_result(max(faces, key=lambda item: item.box[2] * item.box[3]).result)
-        except Exception as exc:
-            self.stop_camera()
-            QMessageBox.warning(self, "实时识别失败", str(exc))
-            return
+        for face in self._camera_faces:
+            x, y, width, height = face.box
+            cv2.rectangle(frame, (x, y), (x + width, y + height), (49, 95, 219), 2)
+            text = f"{face.result.emotion} {face.result.confidence:.0%}"
+            cv2.putText(frame, text, (x, max(20, y - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (49, 95, 219), 2, cv2.LINE_AA)
+        self._maybe_schedule_camera_inference(frame)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         height, width, channels = rgb.shape
         image = QImage(rgb.data, width, height, channels * width, QImage.Format_RGB888).copy()
         self.preview.setPixmap(QPixmap.fromImage(image).scaled(self.preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
+    def _maybe_schedule_camera_inference(self, frame):
+        now = time.monotonic()
+        if self._camera_inference_busy:
+            return
+        if now - self._last_camera_inference_at < self._camera_inference_interval:
+            return
+        self._camera_inference_busy = True
+        self._last_camera_inference_at = now
+        frame_for_inference = frame.copy()
+
+        def completed(faces):
+            self._camera_inference_busy = False
+            if self.camera is None:
+                return
+            self._camera_faces = faces
+            if faces:
+                self.show_result(max(faces, key=lambda item: item.box[2] * item.box[3]).result)
+
+        thread = QThread(self)
+        worker = TaskWorker(lambda: self.recognizer.predict_frame(frame_for_inference))
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.succeeded.connect(completed)
+        worker.failed.connect(self._camera_inference_failed)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._finish_camera_worker)
+        self._camera_thread = thread
+        self._camera_worker = worker
+        thread.start()
+
+    def _camera_inference_failed(self, message):
+        self._camera_inference_busy = False
+        self._camera_faces = []
+        self.result_label.setText("实时识别失败")
+        self.confidence_label.setText("置信度：--")
+
+    def _finish_camera_worker(self):
+        self._camera_thread = None
+        self._camera_worker = None
+
     def closeEvent(self, event):
         self.stop_camera()
+        if self._camera_thread is not None and self._camera_thread.isRunning():
+            self._camera_thread.quit()
+            self._camera_thread.wait(1000)
         super().closeEvent(event)

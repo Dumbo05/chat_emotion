@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -6,14 +6,23 @@ from threading import Lock
 
 import cv2
 import numpy as np
+import onnxruntime as ort
 
 from emotion_app.config import RESOURCE_ROOT
 from emotion_app.domain import EMOTIONS, RecognitionResult
 from emotion_app.recognizers.base import FileRecognizerProtocol
 
-MODEL_NAME = "RAF-DB Basic 自训练 SE-ResNet18 + Flip TTA"
+MODEL_NAME = "RAF-DB v4 EfficientNetV2 + ConvNeXt-Large + MaxViT ensemble"
 MODEL_LABELS = ("surprise", "fear", "disgust", "joy", "sadness", "anger", "neutral")
+ENSEMBLE_MEMBERS = (
+    "efficientnetv2_m_224_seed42.onnx",
+    "convnext_large_224_seed42.onnx",
+    "maxvit_base_224_seed42.onnx",
+)
+INPUT_SIZE = 224
 MAX_DETECTION_DIMENSION = 960
+IMAGENET_MEAN = np.asarray([0.485, 0.456, 0.406], dtype=np.float32)
+IMAGENET_STD = np.asarray([0.229, 0.224, 0.225], dtype=np.float32)
 
 
 @dataclass(frozen=True)
@@ -28,30 +37,39 @@ class ImageRecognizer(FileRecognizerProtocol):
     def __init__(self, model_path: str | Path | None = None):
         self.model_path = Path(model_path or RESOURCE_ROOT / "models" / "image")
         self.detector_path = self.model_path / "face_detection_yunet_2023mar.onnx"
-        self.expression_path = self.model_path / "rafdb_se_resnet18" / "rafdb_emotion.onnx"
+        self.expression_dir = self.model_path / "rafdb_v4_ensemble"
+        self.expression_paths = [self.expression_dir / name for name in ENSEMBLE_MEMBERS]
         self._detector = None
-        self._expression_net = None
+        self._expression_sessions: list[ort.InferenceSession] = []
         self._lock = Lock()
 
     @property
     def available(self) -> bool:
-        return self.detector_path.is_file() and self.expression_path.is_file()
+        return self.detector_path.is_file() and all(path.is_file() for path in self.expression_paths)
 
     @property
     def status(self) -> str:
         if not self.available:
-            return f"未找到图像模型：{self.model_path}"
-        return "RAF-DB Basic 自训练 SE-ResNet18 已就绪（支持图片与摄像头）"
+            return f"Image model files are missing under: {self.model_path}"
+        return f"{MODEL_NAME} is ready for image files and camera frames"
 
     def _load(self) -> None:
         if self._detector is None:
             self._detector = cv2.FaceDetectorYN.create(
                 str(self.detector_path), "", (320, 320), 0.6, 0.3, 5000
             )
-        if self._expression_net is None:
-            self._expression_net = cv2.dnn.readNet(str(self.expression_path))
-            self._expression_net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-            self._expression_net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
+        if not self._expression_sessions:
+            options = ort.SessionOptions()
+            options.intra_op_num_threads = 1
+            options.inter_op_num_threads = 1
+            self._expression_sessions = [
+                ort.InferenceSession(
+                    str(path),
+                    sess_options=options,
+                    providers=["CPUExecutionProvider"],
+                )
+                for path in self.expression_paths
+            ]
 
     @staticmethod
     def _softmax(scores: np.ndarray) -> np.ndarray:
@@ -64,31 +82,43 @@ class ImageRecognizer(FileRecognizerProtocol):
     def _align_face(frame: np.ndarray, face: np.ndarray) -> np.ndarray:
         landmarks = np.asarray(face[4:14], dtype=np.float32).reshape(5, 2)
         reference = np.asarray(
-            [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
-             [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32
+            [
+                [38.2946, 51.6963],
+                [73.5318, 51.5014],
+                [56.0252, 71.7366],
+                [41.5493, 92.3655],
+                [70.7299, 92.2041],
+            ],
+            dtype=np.float32,
         )
         transform, _ = cv2.estimateAffinePartial2D(landmarks, reference, method=cv2.LMEDS)
         if transform is None:
             x, y, w, h = [max(0, int(value)) for value in face[:4]]
-            crop = frame[y:y + h, x:x + w]
+            crop = frame[y : y + h, x : x + w]
             if crop.size == 0:
-                raise ValueError("检测到的人脸区域无效")
+                raise ValueError("Detected face crop is empty")
             return cv2.resize(crop, (112, 112))
         return cv2.warpAffine(frame, transform, (112, 112))
 
+    @staticmethod
+    def _preprocess(aligned_bgr: np.ndarray) -> np.ndarray:
+        resized = cv2.resize(aligned_bgr, (INPUT_SIZE, INPUT_SIZE), interpolation=cv2.INTER_CUBIC)
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        normalized = (rgb - IMAGENET_MEAN) / IMAGENET_STD
+        return np.transpose(normalized, (2, 0, 1)).astype(np.float32)
+
     def _classify(self, aligned_bgr: np.ndarray) -> RecognitionResult:
-        blob = cv2.dnn.blobFromImage(
-            aligned_bgr,
-            scalefactor=1.0 / 127.5,
-            size=(100, 100),
-            mean=(127.5, 127.5, 127.5),
-            swapRB=True,
-            crop=False,
-        )
-        batch = np.concatenate((blob, blob[:, :, :, ::-1]), axis=0)
-        self._expression_net.setInput(batch)
-        raw = self._expression_net.forward().mean(axis=0)
-        values = self._softmax(raw)
+        original = self._preprocess(aligned_bgr)
+        flipped = self._preprocess(cv2.flip(aligned_bgr, 1))
+        batch = np.stack([original, flipped], axis=0)
+
+        probabilities_by_model = []
+        for session in self._expression_sessions:
+            input_name = session.get_inputs()[0].name
+            logits = session.run(None, {input_name: batch})[0].mean(axis=0)
+            probabilities_by_model.append(self._softmax(logits))
+        values = np.mean(probabilities_by_model, axis=0)
+
         probabilities = {emotion: 0.0 for emotion in EMOTIONS}
         for label, probability in zip(MODEL_LABELS, values):
             probabilities[label] = float(probability)
@@ -154,9 +184,9 @@ class ImageRecognizer(FileRecognizerProtocol):
         if not self.available:
             raise RuntimeError(self.status)
         if frame is None or not isinstance(frame, np.ndarray) or frame.ndim != 3:
-            raise ValueError("摄像头或图像帧无效")
+            raise ValueError("Camera or image frame is invalid")
         if frame.shape[0] < 20 or frame.shape[1] < 20:
-            raise ValueError("图像尺寸过小")
+            raise ValueError("Image frame is too small")
         with self._lock:
             self._load()
             predictions = self._predict_orientation(frame)
@@ -182,21 +212,21 @@ class ImageRecognizer(FileRecognizerProtocol):
     def predict(self, path: str | Path) -> RecognitionResult:
         candidate = Path(path)
         if not candidate.is_file():
-            return RecognitionResult.failure("请选择有效的图像文件", MODEL_NAME)
+            return RecognitionResult.failure("Please choose a valid image file", MODEL_NAME)
         if candidate.suffix.lower() not in {".png", ".jpg", ".jpeg", ".bmp", ".webp"}:
-            return RecognitionResult.failure("仅支持 PNG、JPG、BMP 或 WebP 图像", MODEL_NAME)
+            return RecognitionResult.failure("Only PNG, JPG, JPEG, BMP and WebP images are supported", MODEL_NAME)
         if not self.available:
             return RecognitionResult.failure(self.status, MODEL_NAME)
         try:
             frame = cv2.imdecode(np.fromfile(candidate, dtype=np.uint8), cv2.IMREAD_COLOR)
             if frame is None:
-                return RecognitionResult.failure("无法读取图像文件", MODEL_NAME)
+                return RecognitionResult.failure("Cannot read the image file", MODEL_NAME)
             faces = self.predict_frame(frame, try_rotations=True)
             if not faces:
                 return RecognitionResult.failure(
-                    "图像中未检测到人脸；请尽量使用清晰、无遮挡且脸部占比适中的照片",
+                    "No face was detected in the image. Use a clear, frontal, unobstructed face photo.",
                     MODEL_NAME,
                 )
             return max(faces, key=lambda item: item.box[2] * item.box[3]).result
         except Exception as exc:
-            return RecognitionResult.failure(f"图像识别失败：{exc}", MODEL_NAME)
+            return RecognitionResult.failure(f"Image recognition failed: {exc}", MODEL_NAME)

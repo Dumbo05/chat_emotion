@@ -61,4 +61,3 @@ def test_trained_speech_recognizer_returns_seven_probabilities(tmp_path):
     assert result.confidence == 0.90
     assert set(result.probabilities) == set(EMOTIONS)
     assert abs(sum(result.probabilities.values()) - 1.0) < 1e-9
-

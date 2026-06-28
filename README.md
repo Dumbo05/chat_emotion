@@ -1,90 +1,53 @@
-# Chat Emotion：多模态情感识别桌面系统
+﻿# Chat Emotion: Local Multimodal Emotion Recognition
 
-一个面向科研演示与课程实验的本地多模态情感识别系统。项目以统一的七类情感空间为核心，分别处理文本、面部图像和语音输入，并通过 PyQt5 提供可视化桌面界面。代码、实验报告、科研绘图和绘图源数据均可审计；大型模型、原始数据集、缓存和构建产物不纳入 Git 仓库。
+A PyQt5 desktop prototype for local emotion recognition from text, speech, and facial images. The project keeps a unified seven-class label space: `anger`, `disgust`, `fear`, `joy`, `sadness`, `surprise`, and `neutral`.
 
-> 七分类标签：`anger`、`disgust`、`fear`、`joy`、`sadness`、`surprise`、`neutral`。
+This repository is intended for coursework, reproducible experiments, and engineering review. Source code, reports, plotting scripts, and small metadata are tracked. Large model weights, raw datasets, caches, server outputs, and packaged executables are intentionally excluded from Git.
 
-> 新电脑首次安装请直接阅读：[完整复现与使用教程](docs/完整复现教程.md)。其中包含运行时模型包、摄像头、Excel、训练和故障排查说明。
+## Current Modules
 
-## 项目特点
-
-- **文本情感识别**：基于 XLM-R 的中英文七分类模型。
-- **图像情感识别**：基于 RAF-DB 训练的 SE-ResNet18，使用 YuNet 人脸检测和 Flip TTA。
-- **语音情感识别**：以 WavLM 表征和 SIMSAN 分类头为主，保留传统 MFCC/RBF-SVM 回退方案。
-- **本地桌面界面**：推理在本机完成，支持文本输入、图片选择和音频选择。
-- **实验可复现**：训练、评估、ONNX 导出、模型检查和科研绘图脚本均位于 `scripts/`。
-- **工程边界清晰**：数据统一放在 `datasets/`，模型放在 `models/`，实验输出放在 `outputs/`。
-
-## 系统界面
-
-| 文本识别 | 图像识别 | 语音识别 |
-| --- | --- | --- |
-| ![文本识别界面](docs/images/text-interface.png) | ![图像识别界面](docs/images/image-interface.png) | ![语音识别界面](docs/images/speech-interface.png) |
-
-## 方法概述
-
-| 模态 | 输入 | 核心方法 | 运行时模型 |
+| Modality | Input | Main runtime method | Notes |
 | --- | --- | --- | --- |
-| 文本 | 中文或英文文本 | XLM-R 序列分类 | Hugging Face 模型目录 |
-| 图像 | 单人脸图片 | YuNet + SE-ResNet18 + Flip TTA | ONNX |
-| 语音 | WAV/MP3 等音频 | WavLM 表征 + SIMSAN 分类头 | ONNX + Joblib |
+| Text | Chinese or English text / Excel rows | XLM-R style ONNX text classifier | Uses local `models/text` or `EMOTION_TEXT_MODEL` |
+| Speech | WAV / MP3 | Wav2Vec2-DANN ONNX first, WavLM-SIMSAN fallback | Wav2Vec2-DANN reaches 89.38% on TESS but weak cross-dataset generalization |
+| Image | Image file / camera frame | RAF-DB v4 ONNX ensemble | EfficientNetV2 + ConvNeXt-Large + MaxViT deployment path |
 
-三个模块共享统一的领域对象和结果格式。耗时推理通过工作线程执行，避免阻塞 Qt 主界面；资源路径同时兼容源码运行和 PyInstaller 打包环境。
+## Important Results
 
-## 实验结果
+The latest integrated report is in [`docs/实验报告.md`](docs/实验报告.md). The report also includes Wav2Vec2-DANN reproduction and cross-dataset generalization appendices.
 
-下表给出项目最终报告中的主要结果。详细实验设置、数据划分和误差分析见 [实验报告](docs/实验报告.md)。
-
-| 模态 / 模型 | 评估集 | Accuracy | Macro-F1 | 说明 |
+| Experiment | Dataset / protocol | Accuracy | Weighted or Macro F1 | Interpretation |
 | --- | --- | ---: | ---: | --- |
-| 文本 XLM-R | 七分类测试集 | 67.08% | 60.65% | 中英文统一标签空间 |
-| 图像 SE-ResNet18 | RAF-DB 官方测试集 | 77.71% | 69.22% | Flip TTA Accuracy 78.16% |
-| 语音 MFCC + RBF-SVM | 跨说话人测试，2,584 条 | 50.81% | 44.88% | 传统基线 |
-| 语音 SIMSAN | 锁定测试集，1,224 条 | 54.98% | 54.57% | 主要盲测结果 |
-| 语音 WavLM + SIMSAN | 同一固定测试集，1,224 条 | 66.58% | 66.81% | 测试集此前已被使用，属于非盲复评 |
+| Text XLM-R | Seven-class text test set | 67.08% | 60.65% Macro-F1 | Baseline multilingual text model |
+| Image v4 ensemble | RAF-DB official test | 89.41% | 83.17% Macro-F1 | Strong visual model, selected by validation Macro-F1 |
+| Speech Wav2Vec2-DANN | TESS OAF -> YAF | 89.38% | 88.29% weighted F1 | Clean, same-corpus speaker-independent result |
+| Speech Wav2Vec2-DANN | CREMA-D balanced sample | 21.33% | 17.71% weighted F1 | Cross-corpus generalization is weak |
+| Speech Wav2Vec2-DANN | EmoDB mapped classes | 39.43% | 40.62% weighted F1 | Better than CREMA-D, still far below TESS |
 
-最后一行不能解释为全新的独立盲测结果。仓库保留这一说明，避免因重复查看测试集而高估泛化性能。
-
-## 科研绘图与源数据
-
-科研绘图的 PNG、PDF、SVG 和对应 CSV/JSON 已纳入 `docs/research-figures/`。本地 `outputs/image_speech_research_figures/` 中还保留投稿级 TIFF 原稿，但 TIFF 不提交到 Git，以控制仓库体积。
-
-![语音模型性能](docs/research-figures/figure_1_speech_performance.png)
-
-![语音混淆矩阵](docs/research-figures/figure_2_speech_confusion_matrices.png)
-
-![模型配置与复杂度](docs/research-figures/figure_3_model_profiles.png)
-
-## 工程结构
+## Repository Layout
 
 ```text
 chat_emotion/
-├── app.py                         # 应用入口
-├── emotion_app/                   # 业务逻辑、识别器和界面
+├── app.py                         # Desktop entry point
+├── emotion_app/                   # Runtime app code, recognizers, UI, workers
 │   ├── recognizers/
 │   └── ui/
-├── scripts/                       # 数据准备、训练、评估、导出和绘图
-├── tests/                         # 自动化测试
-├── datasets/                      # 统一数据目录
-│   ├── project-data/
-│   ├── GoEmotions-pytorch/
-│   ├── OCEMOTION/
-│   ├── TESS/
-│   ├── CREMA-D/
-│   └── EmoDB/
-├── models/                        # 本地模型权重（Git 忽略）
-├── outputs/                       # 本地实验输出（Git 忽略）
-├── docs/                          # 实验报告、界面截图和科研绘图
-├── vendor/                        # 第三方许可与必要资源
-├── emotion_app.spec               # PyInstaller 配置
-└── requirements*.txt              # 运行、开发与训练依赖
+├── scripts/                       # Data preparation, training, evaluation, export, figures
+│   ├── image/
+│   ├── speech/
+│   └── fusion/
+├── tests/                         # Unit and smoke tests
+├── docs/                          # Reports, figures, interface screenshots
+├── datasets/                      # Small metadata and dataset instructions only
+├── models/                        # README only; large weights are ignored
+├── vendor/                        # Third-party licenses / minimal references
+├── emotion_app.spec               # PyInstaller configuration
+└── requirements*.txt              # Runtime, training, and dev dependencies
 ```
 
-数据集的放置方式和 Git 跟踪策略见 [datasets/README.md](datasets/README.md)，模型文件布局见 [models/README.md](models/README.md)。
+## Setup
 
-## 环境安装
-
-推荐 Windows 10/11、Python 3.10 或 3.11。项目本地已保留 `.venv`，清理工程不会删除该环境；克隆仓库的用户需要自行创建环境。
+Recommended: Windows 10/11 and Python 3.12 for the current local environment. Python 3.10+ should work for most scripts, but packaging should be tested on the target machine.
 
 ```powershell
 git clone https://github.com/Dumbo05/chat_emotion.git
@@ -95,105 +58,64 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-开发和测试依赖：
+Development and testing:
 
 ```powershell
 pip install -r requirements-dev.txt
-pytest
+.\.venv\Scripts\python.exe -m pytest
 ```
 
-训练相关依赖：
+Training / export dependencies:
 
 ```powershell
 pip install -r requirements-train.txt
 ```
 
-## 模型准备与运行
+## Model Files
 
-Git 仓库不包含大型模型权重。请按 [模型目录说明](models/README.md) 放置文本、图像和语音模型，或运行相应训练脚本生成。
+Large model files are not committed. Prepare them under `models/` as described in [`models/README.md`](models/README.md). The desktop app will show a real error if a required model is missing; it does not use keyword heuristics or random fallback predictions.
 
-源码运行：
+Expected runtime locations include:
+
+```text
+models/text/
+models/image/rafdb_v4_ensemble/
+models/speech/w2v_dann/
+models/speech/wavlm_simsan_encoder.onnx
+models/speech/wavlm_simsan_head.joblib
+```
+
+## Run the Desktop App
 
 ```powershell
 .\.venv\Scripts\python.exe app.py
 ```
 
-若已生成本地发行版，也可直接运行 `dist/EmotionRecognition.exe`。发行版、虚拟环境和模型均保留在本地，但不会上传到源码仓库。
+If a local packaged build exists, run `dist/EmotionRecognition.exe`. Packaged executables are local release artifacts and are not pushed to GitHub.
 
-## 数据准备与训练
+## Useful Evaluation Commands
 
-所有训练数据统一位于 `datasets/`。常用命令如下。
-
-文本数据准备与训练：
+Wav2Vec2-DANN cross-dataset test:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\prepare_dataset.py
-.\.venv\Scripts\python.exe scripts\train_text_model.py `
-  --data-dir datasets\project-data\processed\text `
-  --model-name xlm-roberta-base `
-  --output-dir models\text
+.\.venv\Scripts\python.exe scripts\speech\evaluate_w2v_dann_cross_dataset.py --dataset-path .\datasets\CREMA-D --dataset crema-d --max-per-class 50
+.\.venv\Scripts\python.exe scripts\speech\evaluate_w2v_dann_cross_dataset.py --dataset-path .\datasets\EmoDB --dataset emodb
 ```
 
-RAF-DB 图像模型训练：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\train_rafdb_model.py `
-  --data-root datasets\project-data\processed\raf-db-basic\aligned `
-  --labels datasets\project-data\raw\raf-db-basic\extracted\EmoLabel\list_patition_label.txt `
-  --output models\image\rafdb_se_resnet18 `
-  --architecture se_resnet18
-```
-
-语音传统基线与 SIMSAN：
-
-```powershell
-.\.venv\Scripts\python.exe scripts\train_speech_model.py `
-  --tess-dir datasets\TESS `
-  --crema-dir datasets\CREMA-D `
-  --emodb-dir datasets\EmoDB
-
-.\.venv\Scripts\python.exe scripts\train_simsan.py `
-  --tess-dir datasets\TESS `
-  --crema-dir datasets\CREMA-D `
-  --emodb-dir datasets\EmoDB
-```
-
-WavLM 特征提取、分类头训练、固定测试评估和 ONNX 导出分别由 `extract_wavlm_features.py`、`train_wavlm_simsan_head.py`、`evaluate_wavlm_simsan_fixed_test.py` 与 `export_wavlm_simsan_onnx.py` 完成。
-
-## 打包
+PyInstaller build:
 
 ```powershell
 pip install pyinstaller
 pyinstaller --noconfirm emotion_app.spec
 ```
 
-`emotion_app.spec` 是唯一保留的可移植打包配置。带绝对路径的临时 spec、历史构建目录和旧版可执行文件已从工程中清理。
+## Data, Privacy, and Limitations
 
-## 测试与质量控制
+- Inference is local by default; the app does not upload user input.
+- Raw datasets and pretrained checkpoints are governed by their original licenses and are not redistributed here.
+- Emotion recognition is affected by culture, language, context, microphone/camera quality, and annotation ambiguity.
+- Reported dataset metrics should not be interpreted as medical, psychological, hiring, legal, or real-world diagnostic evidence.
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest
-```
+## License
 
-建议在提交前同时执行：
-
-```powershell
-git diff --check
-git status --short
-```
-
-## 数据、隐私与限制
-
-- 图像和语音推理默认在本地执行，项目不会主动上传用户输入。
-- 模型预测仅用于科研、教学和软件演示，不应作为医疗、心理诊断、招聘或执法依据。
-- 表情、文本和语音中的情绪信号受文化、语言、场景、身份与采集设备影响。
-- RAF-DB、TESS、CREMA-D、EmoDB、OCEMOTION、GoEmotions 以及预训练模型均受各自许可约束；本项目许可证不替代其原始条款。
-- 开源仓库不分发第三方原始数据和大型权重，保证仓库精简，也避免越权再分发。
-
-## 许可证与第三方组件
-
-项目代码采用 [MIT License](LICENSE)。第三方依赖与许可信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 及 `vendor/` 中保留的上游许可文件。
-
-## 引用
-
-若本项目用于课程报告或科研工作，请引用本仓库，并同时引用实际使用的数据集、预训练模型和方法论文。实验数字应连同数据划分与“盲测/非盲复评”状态一起报告。
+Project code is released under the [MIT License](LICENSE). Third-party notices are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

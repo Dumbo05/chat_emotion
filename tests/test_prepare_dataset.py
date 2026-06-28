@@ -31,4 +31,3 @@ def test_dataset_manifest_contains_stable_checksums(tmp_path):
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["version"] == "dataset_v1"
     assert set(manifest["sha256"]) == {"train.csv", "validation.csv", "test.csv"}
-

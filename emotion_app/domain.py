@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from typing import Mapping
@@ -27,6 +27,7 @@ LABEL_ALIASES = {
     "sadness": "sadness",
     "surprise": "surprise",
     "surprised": "surprise",
+    "pleasant_surprise": "surprise",
     "neutral": "neutral",
 }
 
@@ -59,4 +60,3 @@ class RecognitionResult:
         payload["emotion_zh"] = EMOTION_LABELS_ZH.get(self.emotion or "", "")
         payload["ok"] = self.ok
         return payload
-
